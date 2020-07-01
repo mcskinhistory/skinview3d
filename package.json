@@ -19,20 +19,21 @@
 	},
 	"repository": {
 		"type": "git",
-		"url": "git+https://github.com/bs-community/skinview3d.git"
+		"url": "git+https://github.com/mcskinhistory/skinview3d.git"
 	},
 	"author": "Haowei Wen <yushijinhun@gmail.com> (https://github.com/yushijinhun)",
 	"contributors": [
 		"Sean Boult <hacksore@mcskinsearch.com> (https://github.com/Hacksore)",
 		"Pig Fang <g-plane@hotmail.com> (https://github.com/g-plane)",
 		"printempw <h@prinzeugen.net> (https://github.com/printempw)",
-		"Kent Rasmussen <hyprkookeez@gmail.com> (https://github.com/earthiverse)"
+		"Kent Rasmussen <hyprkookeez@gmail.com> (https://github.com/earthiverse)",
+		"Mehdi Baaboura <mbaaboura@gigadrivegroup.com> (https://github.com/Zeryther)"
 	],
 	"license": "MIT",
 	"bugs": {
-		"url": "https://github.com/bs-community/skinview3d/issues"
+		"url": "https://github.com/mcskinhistory/skinview3d/issues"
 	},
-	"homepage": "https://github.com/bs-community/skinview3d",
+	"homepage": "https://github.com/mcskinhistory/skinview3d",
 	"files": [
 		"libs",
 		"bundles"
