@@ -1,4 +1,4 @@
-import { ModelType } from "skinview-utils";
+import { ModelType } from "@mcskinhistory/skinview-utils";
 import { BoxGeometry, DoubleSide, FrontSide, Group, Mesh, MeshBasicMaterial, Object3D, Texture, Vector2 } from "three";
 
 function toFaceVertices(x1: number, y1: number, x2: number, y2: number, w: number, h: number): Array<Vector2> {
