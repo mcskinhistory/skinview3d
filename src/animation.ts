@@ -162,7 +162,7 @@ export const WalkingAnimation: Animation = (player, time) => {
 export const RunningAnimation: Animation = (player, time) => {
 	const skin = player.skin;
 
-	time *= 15;
+	time = time * 15 + Math.PI * 0.5;
 
 	// Leg swing with larger amplitude
 	skin.leftLeg.rotation.x = Math.cos(time + Math.PI) * 1.3;
@@ -194,4 +194,31 @@ export const RunningAnimation: Animation = (player, time) => {
 
 export const RotatingAnimation: Animation = (player, time) => {
 	player.rotation.y = time;
+};
+
+function clamp(num: number, min: number, max: number): number {
+	return num <= min ? min : num >= max ? max : num;
+}
+
+export const FlyingAnimation: Animation = (player, time) => {
+	// body rotation finishes in 0.5s
+	// elytra expansion finishes in 3.3s
+
+	if (time < 0) time = 0;
+	time *= 20;
+	const startProgress = clamp((time * time) / 100, 0, 1);
+
+	player.rotation.x = startProgress * Math.PI / 2;
+	player.skin.head.rotation.x = startProgress > .5 ? Math.PI / 4 - player.rotation.x : 0;
+
+	const basicArmRotationZ = Math.PI * .25 * startProgress;
+	player.skin.leftArm.rotation.z = basicArmRotationZ;
+	player.skin.rightArm.rotation.z = -basicArmRotationZ;
+
+	const elytraRotationX = .34906584;
+	const elytraRotationZ = Math.PI / 2;
+	const interpolation = Math.pow(.9, time);
+	player.elytra.leftWing.rotation.x = elytraRotationX + interpolation * (.2617994 - elytraRotationX);
+	player.elytra.leftWing.rotation.z = elytraRotationZ + interpolation * (.2617994 - elytraRotationZ);
+	player.elytra.updateRightWing();
 };

@@ -1,47 +1,72 @@
-import { applyMixins, CapeContainer, ModelType, SkinContainer, RemoteImage, TextureSource } from "@mcskinhistory/skinview-utils";
+import { inferModelType, isTextureSource, loadCapeToCanvas, loadImage, loadSkinToCanvas, ModelType, RemoteImage, TextureSource } from "skinview-utils";
 import { NearestFilter, PerspectiveCamera, Scene, Texture, Vector2, WebGLRenderer } from "three";
 import { RootAnimation } from "./animation.js";
-import { PlayerObject } from "./model.js";
+import { BackEquipment, PlayerObject } from "./model.js";
 
-export type LoadOptions = {
+export interface LoadOptions {
 	/**
-	 * Whether to make the object visible after the texture is loaded. (default: true)
+	 * Whether to make the object visible after the texture is loaded. Default is true.
 	 */
 	makeVisible?: boolean;
 }
 
-export type SkinViewerOptions = {
+export interface CapeLoadOptions extends LoadOptions {
+	/**
+	 * The equipment (cape or elytra) to show, defaults to "cape".
+	 * If makeVisible is set to false, this option will have no effect.
+	 */
+	backEquipment?: BackEquipment;
+}
+
+export interface SkinViewerOptions {
 	width?: number;
 	height?: number;
 	skin?: RemoteImage | TextureSource;
+	model?: ModelType | "auto-detect";
 	cape?: RemoteImage | TextureSource;
+
+	/**
+	 * Whether the canvas contains an alpha buffer. Default is true.
+	 * This option can be turned off if you use an opaque background.
+	 */
+	alpha?: boolean;
+
+	/**
+	 * Render target.
+	 * A new canvas is created if this parameter is unspecified.
+	 */
+	canvas?: HTMLCanvasElement;
+
+	/**
+	 * Whether to preserve the buffers until manually cleared or overwritten. Default is false.
+	 */
+	preserveDrawingBuffer?: boolean;
+
+	/**
+	 * The initial value of `SkinViewer.renderPaused`. Default is false.
+	 * If this option is true, rendering and animation loops will not start.
+	 */
+	renderPaused?: boolean;
 }
 
-function toMakeVisible(options?: LoadOptions): boolean {
-	if (options && options.makeVisible === false) {
-		return false;
-	}
-	return true;
-}
-
-class SkinViewer {
-	readonly domElement: Node;
+export class SkinViewer {
+	readonly canvas: HTMLCanvasElement;
 	readonly scene: Scene;
 	readonly camera: PerspectiveCamera;
 	readonly renderer: WebGLRenderer;
 	readonly playerObject: PlayerObject;
 	readonly animations: RootAnimation = new RootAnimation();
 
-	protected readonly skinCanvas: HTMLCanvasElement;
-	protected readonly capeCanvas: HTMLCanvasElement;
+	readonly skinCanvas: HTMLCanvasElement;
+	readonly capeCanvas: HTMLCanvasElement;
 	private readonly skinTexture: Texture;
 	private readonly capeTexture: Texture;
 
 	private _disposed: boolean = false;
 	private _renderPaused: boolean = false;
 
-	constructor(domElement: Node, options: SkinViewerOptions = {}) {
-		this.domElement = domElement;
+	constructor(options: SkinViewerOptions = {}) {
+		this.canvas = options.canvas === undefined ? document.createElement("canvas") : options.canvas;
 
 		// texture
 		this.skinCanvas = document.createElement("canvas");
@@ -58,11 +83,16 @@ class SkinViewer {
 
 		// Use smaller fov to avoid distortion
 		this.camera = new PerspectiveCamera(40);
-		this.camera.position.y = -12;
+		this.camera.position.y = -8;
 		this.camera.position.z = 60;
 
-		this.renderer = new WebGLRenderer({ alpha: true });
-		this.domElement.appendChild(this.renderer.domElement);
+		this.renderer = new WebGLRenderer({
+			canvas: this.canvas,
+			alpha: options.alpha !== false, // default: true
+			preserveDrawingBuffer: options.preserveDrawingBuffer === true // default: false
+
+		});
+		this.renderer.setPixelRatio(window.devicePixelRatio);
 
 		this.playerObject = new PlayerObject(this.skinTexture, this.capeTexture);
 		this.playerObject.name = "player";
@@ -70,10 +100,8 @@ class SkinViewer {
 		this.playerObject.cape.visible = false;
 		this.scene.add(this.playerObject);
 
-		window.requestAnimationFrame(() => this.draw());
-
 		if (options.skin !== undefined) {
-			this.loadSkin(options.skin);
+			this.loadSkin(options.skin, options.model);
 		}
 		if (options.cape !== undefined) {
 			this.loadCape(options.cape);
@@ -84,29 +112,70 @@ class SkinViewer {
 		if (options.height !== undefined) {
 			this.height = options.height;
 		}
-	}
 
-	protected skinLoaded(model: ModelType, options?: LoadOptions): void {
-		this.skinTexture.needsUpdate = true;
-		this.playerObject.skin.modelType = model;
-		if (toMakeVisible(options)) {
-			this.playerObject.skin.visible = true;
+		if (options.renderPaused === true) {
+			this._renderPaused = true;
+		} else {
+			window.requestAnimationFrame(() => this.draw());
 		}
 	}
 
-	protected capeLoaded(options?: LoadOptions): void {
-		this.capeTexture.needsUpdate = true;
-		if (toMakeVisible(options)) {
-			this.playerObject.cape.visible = true;
+	loadSkin(empty: null): void;
+	loadSkin<S extends TextureSource | RemoteImage>(
+		source: S,
+		model?: ModelType | "auto-detect",
+		options?: LoadOptions
+	): S extends TextureSource ? void : Promise<void>;
+
+	loadSkin(
+		source: TextureSource | RemoteImage | null,
+		model: ModelType | "auto-detect" = "auto-detect",
+		options: LoadOptions = {}
+	): void | Promise<void> {
+		if (source === null) {
+			this.resetSkin();
+		} else if (isTextureSource(source)) {
+			loadSkinToCanvas(this.skinCanvas, source);
+			const actualModel = model === "auto-detect" ? inferModelType(this.skinCanvas) : model;
+			this.skinTexture.needsUpdate = true;
+			this.playerObject.skin.modelType = actualModel;
+			if (options.makeVisible !== false) {
+				this.playerObject.skin.visible = true;
+			}
+		} else {
+			return loadImage(source).then(image => this.loadSkin(image, model, options));
 		}
 	}
 
-	protected resetSkin(): void {
+	resetSkin(): void {
 		this.playerObject.skin.visible = false;
 	}
 
-	protected resetCape(): void {
-		this.playerObject.cape.visible = false;
+	loadCape(empty: null): void;
+	loadCape<S extends TextureSource | RemoteImage>(
+		source: S,
+		options?: CapeLoadOptions
+	): S extends TextureSource ? void : Promise<void>;
+
+	loadCape(
+		source: TextureSource | RemoteImage | null,
+		options: CapeLoadOptions = {}
+	): void | Promise<void> {
+		if (source === null) {
+			this.resetCape();
+		} else if (isTextureSource(source)) {
+			loadCapeToCanvas(this.capeCanvas, source);
+			this.capeTexture.needsUpdate = true;
+			if (options.makeVisible !== false) {
+				this.playerObject.backEquipment = options.backEquipment === undefined ? "cape" : options.backEquipment;
+			}
+		} else {
+			return loadImage(source).then(image => this.loadCape(image, options));
+		}
+	}
+
+	resetCape(): void {
+		this.playerObject.backEquipment = null;
 	}
 
 	private draw(): void {
@@ -114,11 +183,15 @@ class SkinViewer {
 			return;
 		}
 		this.animations.runAnimationLoop(this.playerObject);
-		this.doRender();
+		this.render();
 		window.requestAnimationFrame(() => this.draw());
 	}
 
-	protected doRender(): void {
+	/**
+	* Renders the scene to the canvas.
+	* This method does not change the animation progress.
+	*/
+	render(): void {
 		this.renderer.render(this.scene, this.camera);
 	}
 
@@ -130,7 +203,6 @@ class SkinViewer {
 
 	dispose(): void {
 		this._disposed = true;
-		this.domElement.removeChild(this.renderer.domElement);
 		this.renderer.dispose();
 		this.skinTexture.dispose();
 		this.capeTexture.dispose();
@@ -140,6 +212,11 @@ class SkinViewer {
 		return this._disposed;
 	}
 
+	/**
+	 * Whether rendering and animations are paused.
+	 * Setting this property to true will stop both rendering and animation loops.
+	 * Setting it back to false will resume them.
+	 */
 	get renderPaused(): boolean {
 		return this._renderPaused;
 	}
@@ -168,6 +245,3 @@ class SkinViewer {
 		this.setSize(this.width, newHeight);
 	}
 }
-interface SkinViewer extends SkinContainer<LoadOptions>, CapeContainer<LoadOptions> { }
-applyMixins(SkinViewer, [SkinContainer, CapeContainer]);
-export { SkinViewer };
